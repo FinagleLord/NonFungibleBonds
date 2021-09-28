@@ -115,19 +115,84 @@ library Strings {
     }
 }
 
+
+interface IERC20 {
+  function totalSupply() external view returns (uint256);
+  function balanceOf(address account) external view returns (uint256);
+  function transfer(address recipient, uint256 amount) external returns (bool);
+  function allowance(address owner, address spender) external view returns (uint256);
+  function approve(address spender, uint256 amount) external returns (bool);
+  function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+  event Transfer(address indexed from, address indexed to, uint256 value);
+  event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+/// @notice from Rari Lab's solmate repo
+library SafeERC20 {
+    function safeTransferFrom(
+        IERC20 token,
+        address from,
+        address to,
+        uint256 value
+    ) internal {
+        (bool success, bytes memory data) = address(token).call(
+            abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, value)
+        );
+
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "TRANSFER_FROM_FAILED");
+    }
+
+    function safeTransfer(
+        IERC20 token,
+        address to,
+        uint256 value
+    ) internal {
+        (bool success, bytes memory data) = address(token).call(
+            abi.encodeWithSelector(IERC20.transfer.selector, to, value)
+        );
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "TRANSFER_FAILED");
+    }
+
+    function safeApprove(
+        IERC20 token,
+        address to,
+        uint256 value
+    ) internal {
+        (bool success, bytes memory data) = address(token).call(
+            abi.encodeWithSelector(IERC20.approve.selector, to, value)
+        );
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "APPROVE_FAILED");
+    }
+
+    function safeTransferETH(address to, uint256 value) internal {
+        (bool success, ) = to.call{value: value}(new bytes(0));
+        require(success, "ETH_TRANSFER_FAILED");
+    }
+}
+
 interface IUniqueBondDepository {
     function deposit( uint _amount, uint _maxPrice, address _depositor) external returns ( uint payout, uint bondID );
     function redeem( uint _bondId, address _to ) external returns ( uint payout, bool fullyVested );
 }
 
-contract ERC721 is Ownable, ERC165, IERC721, IERC721Metadata {
+
+
+
+
+contract NonFungibleBondTeller is Ownable, ERC165, IERC721, IERC721Metadata {
     
     /////////////// imports  ///////////////
 
+
+    using SafeERC20 for IERC20;
     using Address for address;
     using Strings for uint256;
 
+
+
+
     /////////////// storage ///////////////
+
 
     string public name;
 
@@ -154,10 +219,34 @@ contract ERC721 is Ownable, ERC165, IERC721, IERC721Metadata {
     // Mapping that returns if an address is a valid bond depo
     mapping ( address => bool ) public whitelistedDepos;
 
+    // Mapping containig an array of bids for each bond
+    mapping ( uint => Bid[] ) public bondBids;
+
+    // Mappping containing the last redemption timestamp for each bond
+    mapping ( uint => uint ) public lastRedeem;
+
     // count of NonFungible bonds that have been minted, used to get the next bond index within tokenIdToBondId mapping
     uint public bondCount;
 
+
+
+
+    /////////////// structs ///////////////
+
+
+    struct Bid {
+        address bidder;     // owner of the bid
+        address principal;  // principal token used as payment
+        uint amount;        // amount of principal being paid
+        uint lastRedeem;    // used to determine if a bid is still valid or not
+        bool refunded;     // has bidder refunded their bid
+    }
+
+
+
+
     /////////////// events ///////////////
+
 
     event BondMinted ( 
         address bondDepo, 
@@ -168,14 +257,25 @@ contract ERC721 is Ownable, ERC165, IERC721, IERC721Metadata {
         uint bondId 
     );
 
+
+
+
     /////////////// construction ///////////////
 
-    constructor(string memory name_, string memory symbol_) {
+
+    constructor(
+        string memory name_, 
+        string memory symbol_
+    ) {
         name = name_;
         symbol = symbol_;
     }
 
+
+
+
     /////////////// bond logic  ///////////////
+
 
     function deposit(
         address _bondDepo,
@@ -200,20 +300,97 @@ contract ERC721 is Ownable, ERC165, IERC721, IERC721Metadata {
         emit BondMinted ( _bondDepo, _amount, _maxPrice, _depositor , tokenId, bondId);
     }
 
+    // sell future yield
+
     function redeem( 
         uint _tokenId
     ) external returns ( uint payout, bool fullyVested ) {
+        require( _exists( _tokenId ) );
+        require( msg.sender == ownerOf[ _tokenId ], "You're not the owner");
         // redeem bond payout from relevent depository with payout sent to its owner
         ( payout, fullyVested ) = IUniqueBondDepository(tokenIdToBondDepo[ _tokenId ] ).redeem( tokenIdToBondId[ _tokenId ], ownerOf[ _tokenId ] );
         // if fullyVested burn the bonds NFT
         if ( fullyVested ) _burn( _tokenId );
+        // log the redemption time
+        lastRedeem[ _tokenId ] = block.timestamp;
     }
+
+    function bid(
+        uint _tokenId,
+        address _principal,
+        uint _amount
+    ) external {
+        // make sure bond exists
+        require( _exists( _tokenId ), "Bond doesn't exist" );
+        // interface bonds bids array
+        Bid[] storage bids = bondBids[ _tokenId ];
+        // push bid to storage
+        bids.push(
+            Bid({
+                bidder: msg.sender,
+                principal: _principal,
+                amount: _amount, 
+                lastRedeem: lastRedeem[ _tokenId ], 
+                refunded: false
+            })
+        );
+        // transfer bid into escrow
+        IERC20( _principal ).safeTransferFrom( msg.sender, address(this), _amount );
+    }
+
+    function acceptBid(
+        uint _tokenId,
+        uint _bidId
+    ) external {
+        // make sure bond exists
+        require( _exists( _tokenId ), "Bond doesn't exist" );
+        // make sure caller is owner of the bond
+        require( msg.sender == ownerOf[ _tokenId ], "You're not the owner");
+        // interface bonds array of bids
+        Bid[] storage bids = bondBids[ _tokenId ];
+        // interface bid thats being accepted
+        Bid storage acceptedBid = bids[ _bidId ];
+        // ensure the bond hasn't been redeemed since the offer was created
+        require( acceptedBid.lastRedeem == lastRedeem[ _tokenId ], "Bid's invalid");
+        // transfer bid payment to bonds owner
+        IERC20( acceptedBid.principal ).safeTransfer( ownerOf[ _tokenId ], acceptedBid.amount );
+        // transfer bond to its new owner
+        safeTransferFrom(ownerOf[ _tokenId ], acceptedBid.bidder, _tokenId);
+    }
+
+    function cancelBid(
+        uint _tokenId,
+        uint _bidId
+    ) external {
+        // make sure bond exists
+        require( _exists( _tokenId ), "Bond doesn't exist" );
+        // make sure caller is owner of the bond
+        require( msg.sender == ownerOf[ _tokenId ], "You're not the owner");
+        // interface bonds array of bids
+        Bid[] storage bids = bondBids[ _tokenId ];
+        // interface bid thats being accepted
+        Bid storage _bid = bids[ _bidId ];
+        // make sure caller is bidder
+        require( msg.sender == _bid.bidder, "You're not the bidder for this bid");
+        // mark the bid as refunded
+        _bid.refunded = true;
+        // transfer bid payment back to bidder
+        IERC20( _bid.principal ).safeTransfer(_bid.bidder, _bid.amount);
+    }
+
+
+    /////////////// policy  ///////////////
+
 
     function setValidDepo(address depo, bool isValid) external onlyPolicy() {
         whitelistedDepos[ depo ] = isValid;
     }
 
+
+
+
     /////////////// nft logic  ///////////////
+
 
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165) returns (bool) {
         return
