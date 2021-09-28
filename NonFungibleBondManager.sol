@@ -70,10 +70,10 @@ library Strings {
 
 interface IUniqueBondDepository {
     function deposit( uint _amount, uint _maxPrice, address _depositor) external returns ( uint payout, uint bondID );
-    function redeem( uint _bondId, address _to ) external returns ( uint );
+    function redeem( uint _bondId, address _to ) external returns ( uint payout, bool fullyVested );
 }
 
-contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
+contract ERC721 is ERC165, IERC721, IERC721Metadata {
     
     /////////////// imports  ///////////////
 
@@ -82,15 +82,15 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
 
     /////////////// storage ///////////////
 
-    string private _name;
+    string public name;
 
-    string private _symbol;
+    string public symbol;
 
     // Mapping from token ID to owner address
-    mapping(uint256 => address) private _owners;
+    mapping(uint256 => address) public ownerOf;
 
     // Mapping owner address to token count
-    mapping(address => uint256) private _balances;
+    mapping(address => uint256) public balanceOf;
 
     // Mapping from token ID to approved address
     mapping(uint256 => address) private _tokenApprovals;
@@ -126,8 +126,8 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
     /////////////// construction ///////////////
 
     constructor(string memory name_, string memory symbol_, address policy_) {
-        _name = name_;
-        _symbol = symbol_;
+        name = name_;
+        symbol = symbol_;
         policy = policy_;
     }
 
@@ -158,9 +158,11 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
 
     function redeem( 
         uint _tokenId
-    ) external returns ( uint ) {
+    ) external returns ( uint payout, bool fullyVested ) {
         // redeem bond payout from relevent depository with payout sent to its owner
-        IUniqueBondDepository(tokenIdToBondDepo[ _tokenId ] ).redeem( tokenIdToBondId[ _tokenId ], ownerOf( _tokenId ));
+        ( payout, fullyVested ) = IUniqueBondDepository(tokenIdToBondDepo[ _tokenId ] ).redeem( tokenIdToBondId[ _tokenId ], ownerOf[ _tokenId ] );
+        // if fullyVested burn the bonds NFT
+        if ( fullyVested ) _burn( _tokenId );
     }
 
     function setValidDepo(address depo, bool isValid) external {
@@ -183,25 +185,6 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
             super.supportsInterface(interfaceId);
     }
 
-    function balanceOf(address owner) public view virtual override returns (uint256) {
-        require(owner != address(0), "ERC721: balance query for the zero address");
-        return _balances[owner];
-    }
-
-    function ownerOf(uint256 tokenId) public view virtual override returns (address) {
-        address owner = _owners[tokenId];
-        require(owner != address(0), "ERC721: owner query for nonexistent token");
-        return owner;
-    }
-
-    function name() public view virtual override returns (string memory) {
-        return _name;
-    }
-
-    function symbol() public view virtual override returns (string memory) {
-        return _symbol;
-    }
-
     function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
         require(_exists(tokenId), "ERC721Metadata: URI query for nonexistent token");
         string memory baseURI = _baseURI();
@@ -218,7 +201,7 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
     }
 
     function approve(address to, uint256 tokenId) public virtual override {
-        address owner = ownerOf(tokenId);
+        address owner = ownerOf[ tokenId ];
         require(to != owner, "ERC721: approval to current owner");
         require(msg.sender == owner || isApprovedForAll(owner, msg.sender),"ERC721: caller is not owner or approved for all");
         _approve(to, tokenId);
@@ -277,7 +260,7 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
     }
 
     function _exists(uint256 tokenId) internal view virtual returns (bool) {
-        return _owners[tokenId] != address(0);
+        return ownerOf[tokenId] != address(0);
     }
 
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view virtual returns (bool) {
@@ -303,8 +286,8 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
         require(to != address(0), "ERC721: mint to the zero address");
         require(!_exists(tokenId), "ERC721: token already minted");
         _beforeTokenTransfer(address(0), to, tokenId);
-        _balances[to] += 1;
-        _owners[tokenId] = to;
+        balanceOf[to] += 1;
+        ownerOf[tokenId] = to;
         emit Transfer(address(0), to, tokenId);
     }
 
@@ -313,8 +296,8 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
         _beforeTokenTransfer(owner, address(0), tokenId);
         // Clear approvals
         _approve(address(0), tokenId);
-        _balances[owner] -= 1;
-        delete _owners[tokenId];
+        balanceOf[owner] -= 1;
+        delete ownerOf[tokenId];
         emit Transfer(owner, address(0), tokenId);
     }
 
@@ -328,9 +311,9 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
         _beforeTokenTransfer(from, to, tokenId);
         // Clear approvals from the previous owner
         _approve(address(0), tokenId);
-        _balances[from] -= 1;
-        _balances[to] += 1;
-        _owners[tokenId] = to;
+        balanceOf[from] -= 1;
+        balanceOf[to] += 1;
+        ownerOf[tokenId] = to;
         emit Transfer(from, to, tokenId);
     }
 
