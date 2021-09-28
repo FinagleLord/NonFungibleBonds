@@ -409,21 +409,21 @@ contract NonFungibleBondManager is NonFungibleToken("Olympus Bond", "BOND"), Own
 
 
     // Mapping from token id to the bond id it represents
-    mapping ( uint => uint ) public tokenIdToBondId;
+    mapping ( uint => uint ) public tokenToBond;
 
     // Mapping from token id to underlying bond depository
-    mapping ( uint => address) public tokenIdToBondDepo;
+    mapping ( uint => address) public tokenToBondDepo;
 
     // Mapping that returns if an address is a valid bond depo
     mapping ( address => bool ) public whitelistedDepos;
 
     // Mapping containig an array of bids for each bond
-    mapping ( uint => Bid[] ) public bondBids;
+    mapping ( uint => Bid[] ) public tokenBids;
 
     // Mappping containing the last redemption timestamp for each bond
     mapping ( uint => uint ) public lastRedeem;
 
-    // count of NonFungible bonds that have been minted, used to get the next bond index within tokenIdToBondId mapping
+    // count of NonFungible bonds that have been minted, used to get the next bond index within tokenToBond mapping
     uint public bondCount;
 
 
@@ -482,9 +482,9 @@ contract NonFungibleBondManager is NonFungibleToken("Olympus Bond", "BOND"), Own
         // mint user a NFT that represents their ownership of a unique bond
         _safeMint(_depositor, bondCount);
         // map the nft to the newly created bonds id 
-        tokenIdToBondId[bondCount] = bondId;
+        tokenToBond[bondCount] = bondId;
         // map the nft to its relevant depo for redeeming/tranfering ownership
-        tokenIdToBondDepo[bondCount] = _bondDepo;
+        tokenToBondDepo[bondCount] = _bondDepo;
         // set tokenId and increment bondCount by one
         tokenId = bondCount;
         bondCount += 1;
@@ -498,7 +498,7 @@ contract NonFungibleBondManager is NonFungibleToken("Olympus Bond", "BOND"), Own
         require( _exists( _tokenId ) );
         require( msg.sender == ownerOf[ _tokenId ], "You're not the owner");
         // redeem bond payout from relevent depository with payout sent to its owner
-        ( payout, fullyVested ) = IUniqueBondDepository(tokenIdToBondDepo[ _tokenId ] ).redeem( tokenIdToBondId[ _tokenId ], ownerOf[ _tokenId ] );
+        ( payout, fullyVested ) = IUniqueBondDepository(tokenToBondDepo[ _tokenId ] ).redeem( tokenToBond[ _tokenId ], ownerOf[ _tokenId ] );
         // if fullyVested burn the bonds NFT
         if ( fullyVested ) _burn( _tokenId );
         // log the redemption time
@@ -513,7 +513,7 @@ contract NonFungibleBondManager is NonFungibleToken("Olympus Bond", "BOND"), Own
         // make sure bond exists
         require( _exists( _tokenId ), "Bond doesn't exist" );
         // interface bonds bids array
-        Bid[] storage bids = bondBids[ _tokenId ];
+        Bid[] storage bids = tokenBids[ _tokenId ];
         // push bid to storage
         bids.push(
             Bid({
@@ -537,7 +537,7 @@ contract NonFungibleBondManager is NonFungibleToken("Olympus Bond", "BOND"), Own
         // make sure caller is owner of the bond
         require( msg.sender == ownerOf[ _tokenId ], "You're not the owner");
         // interface bonds array of bids
-        Bid[] storage bids = bondBids[ _tokenId ];
+        Bid[] storage bids = tokenBids[ _tokenId ];
         // interface bid thats being accepted
         Bid storage acceptedBid = bids[ _bidId ];
         // ensure the bond hasn't been redeemed since the offer was created
@@ -557,7 +557,7 @@ contract NonFungibleBondManager is NonFungibleToken("Olympus Bond", "BOND"), Own
         // make sure caller is owner of the bond
         require( msg.sender == ownerOf[ _tokenId ], "You're not the owner");
         // interface bonds array of bids
-        Bid[] storage bids = bondBids[ _tokenId ];
+        Bid[] storage bids = tokenBids[ _tokenId ];
         // interface bid thats being cancelled
         Bid storage _bid = bids[ _bidId ];
         // make sure caller is bidder
