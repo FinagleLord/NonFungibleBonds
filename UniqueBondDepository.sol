@@ -598,7 +598,7 @@ contract OlympusBondDepository is Ownable {
      */ 
     function redeem( uint _bondId, address _to ) external returns ( uint payout, bool fullyVested ) {        
         // interface bond using id
-        Bond memory bond = bonds[ _bondId ];
+        Bond storage bond = bonds[ _bondId ];
 
         // XXX
         require(msg.sender == bond.owner, "You're not the owner");
