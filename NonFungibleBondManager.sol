@@ -1,5 +1,52 @@
 pragma solidity ^0.8.0;
 
+interface IOwnable {
+  function policy() external view returns (address);
+  function renounceManagement() external;
+  function pushManagement( address newOwner_ ) external;
+  function pullManagement() external;
+}
+
+contract Ownable is IOwnable {
+
+    address internal _owner;
+    address internal _newOwner;
+
+    event OwnershipPushed(address indexed previousOwner, address indexed newOwner);
+    event OwnershipPulled(address indexed previousOwner, address indexed newOwner);
+
+    constructor () {
+        _owner = msg.sender;
+        emit OwnershipPushed( address(0), _owner );
+    }
+
+    function policy() public view virtual override returns (address) {
+        return _owner;
+    }
+
+    modifier onlyPolicy() {
+        require( _owner == msg.sender, "Ownable: caller is not the owner" );
+        _;
+    }
+
+    function renounceManagement() public virtual override onlyPolicy() {
+        emit OwnershipPushed( _owner, address(0) );
+        _owner = address(0);
+    }
+
+    function pushManagement( address newOwner_ ) public virtual override onlyPolicy() {
+        require( newOwner_ != address(0), "Ownable: new owner is the zero address");
+        emit OwnershipPushed( _owner, newOwner_ );
+        _newOwner = newOwner_;
+    }
+    
+    function pullManagement() public virtual override {
+        require( msg.sender == _newOwner, "Ownable: must be new owner to pull");
+        emit OwnershipPulled( _owner, _newOwner );
+        _owner = _newOwner;
+    }
+}
+
 interface IERC721 {
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
     event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
@@ -73,7 +120,7 @@ interface IUniqueBondDepository {
     function redeem( uint _bondId, address _to ) external returns ( uint payout, bool fullyVested );
 }
 
-contract ERC721 is ERC165, IERC721, IERC721Metadata {
+contract ERC721 is Ownable, ERC165, IERC721, IERC721Metadata {
     
     /////////////// imports  ///////////////
 
@@ -110,8 +157,6 @@ contract ERC721 is ERC165, IERC721, IERC721Metadata {
     // count of NonFungible bonds that have been minted, used to get the next bond index within tokenIdToBondId mapping
     uint public bondCount;
 
-    address public policy;
-
     /////////////// events ///////////////
 
     event BondMinted ( 
@@ -125,10 +170,9 @@ contract ERC721 is ERC165, IERC721, IERC721Metadata {
 
     /////////////// construction ///////////////
 
-    constructor(string memory name_, string memory symbol_, address policy_) {
+    constructor(string memory name_, string memory symbol_) {
         name = name_;
         symbol = symbol_;
-        policy = policy_;
     }
 
     /////////////// bond logic  ///////////////
@@ -165,15 +209,8 @@ contract ERC721 is ERC165, IERC721, IERC721Metadata {
         if ( fullyVested ) _burn( _tokenId );
     }
 
-    function setValidDepo(address depo, bool isValid) external {
-        require(msg.sender == policy);
+    function setValidDepo(address depo, bool isValid) external onlyPolicy() {
         whitelistedDepos[ depo ] = isValid;
-    }
-
-    function setPolicy(address _policy) external {
-        require(_policy != address(0));
-        require(msg.sender == policy);
-        policy = _policy;
     }
 
     /////////////// nft logic  ///////////////
@@ -265,7 +302,7 @@ contract ERC721 is ERC165, IERC721, IERC721Metadata {
 
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view virtual returns (bool) {
         require(_exists(tokenId), "ERC721: operator query for nonexistent token");
-        address owner = ownerOf[tokenId];
+        address owner = ownerOf[ tokenId ];
         return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
     }
 
@@ -319,7 +356,7 @@ contract ERC721 is ERC165, IERC721, IERC721Metadata {
 
     function _approve(address to, uint256 tokenId) internal virtual {
         _tokenApprovals[tokenId] = to;
-        emit Approval( ownerOf[ tokenId ], to, tokenId);
+        emit Approval(  ownerOf[ tokenId ], to, tokenId);
     }
 
     function _checkOnERC721Received(
