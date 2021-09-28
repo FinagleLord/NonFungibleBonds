@@ -110,6 +110,8 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
     // count of NonFungible bonds that have been minted, used to get the next bond index within tokenIdToBondId mapping
     uint public bondCount;
 
+    address public policy;
+
     /////////////// events ///////////////
 
     event BondMinted ( 
@@ -123,9 +125,10 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
 
     /////////////// construction ///////////////
 
-    constructor(string memory name_, string memory symbol_) {
+    constructor(string memory name_, string memory symbol_, address policy_) {
         _name = name_;
         _symbol = symbol_;
+        policy = policy_;
     }
 
     /////////////// bond logic  ///////////////
@@ -160,8 +163,15 @@ contract NonFungibleBondManager is ERC165, IERC721, IERC721Metadata {
         IUniqueBondDepository(tokenIdToBondDepo[ _tokenId ] ).redeem( tokenIdToBondId[ _tokenId ], ownerOf( _tokenId ));
     }
 
-    function adjust_validDepo(address depo, bool isValid) external {
-        
+    function setValidDepo(address depo, bool isValid) external {
+        require(msg.sender == policy);
+        whitelistedDepos[ depo ] = isValid;
+    }
+
+    function setPolicy(address _policy) external {
+        require(_policy != address(0));
+        require(msg.sender == policy);
+        policy = _policy;
     }
 
     /////////////// nft logic  ///////////////
