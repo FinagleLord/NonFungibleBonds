@@ -265,7 +265,7 @@ contract ERC721 is ERC165, IERC721, IERC721Metadata {
 
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view virtual returns (bool) {
         require(_exists(tokenId), "ERC721: operator query for nonexistent token");
-        address owner = ownerOf(tokenId);
+        address owner = ownerOf[tokenId];
         return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
     }
 
@@ -292,7 +292,7 @@ contract ERC721 is ERC165, IERC721, IERC721Metadata {
     }
 
     function _burn(uint256 tokenId) internal virtual {
-        address owner = ownerOf(tokenId);
+        address owner = ownerOf[ tokenId ];
         _beforeTokenTransfer(owner, address(0), tokenId);
         // Clear approvals
         _approve(address(0), tokenId);
@@ -306,7 +306,7 @@ contract ERC721 is ERC165, IERC721, IERC721Metadata {
         address to,
         uint256 tokenId
     ) internal virtual {
-        require(ownerOf(tokenId) == from, "ERC721: transfer of token that is not own");
+        require(ownerOf[ tokenId ] == from, "ERC721: transfer of token that is not own");
         require(to != address(0), "ERC721: transfer to the zero address");
         _beforeTokenTransfer(from, to, tokenId);
         // Clear approvals from the previous owner
@@ -319,7 +319,7 @@ contract ERC721 is ERC165, IERC721, IERC721Metadata {
 
     function _approve(address to, uint256 tokenId) internal virtual {
         _tokenApprovals[tokenId] = to;
-        emit Approval(ownerOf(tokenId), to, tokenId);
+        emit Approval( ownerOf[ tokenId ], to, tokenId);
     }
 
     function _checkOnERC721Received(
