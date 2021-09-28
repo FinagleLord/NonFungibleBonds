@@ -335,39 +335,35 @@ contract OlympusBondDepository is Ownable {
 
     /* ======== STATE VARIABLES ======== */
 
-    IERC20 immutable OHM; // token received from treasury
+    IERC20 immutable OHM;                       // token received from treasury
     
-    IERC20 immutable sOHM; // payout token
+    IERC20 immutable sOHM;                      // payout token
     
-    IERC20 immutable principal; // token used to create bond
+    IERC20 immutable principal;                 // token used to create bond
     
-    ITreasury immutable treasury; // mints OHM when receives principal
+    ITreasury immutable treasury;               // mints OHM when receives principal
 
-    bool public immutable isLiquidityBond; // LP and Reserve bonds are treated slightly different
+    bool public immutable isLiquidityBond;      // LP and Reserve bonds are treated slightly different
     
-    address public immutable bondCalculator; // calculates value of LP tokens
+    address public immutable bondCalculator;    // calculates value of LP tokens
 
-    address public staking; // to auto-stake payout
+    address public staking;                     // to auto-stake payout
     
-    address public stakingHelper; // to stake and claim if no staking warmup
+    address public stakingHelper;               // to stake and claim if no staking warmup
     
     bool public useHelper;
 
-    Terms public terms; // stores terms for new bonds
+    Terms public terms;                     // stores terms for new bonds
     
-    Adjust public adjustment; // stores adjustment to BCV data
+    Adjust public adjustment;               // stores adjustment to BCV data
 
-    // mapping( address => Bond ) public bondInfo; // stores bond information for depositors
+    mapping ( uint => Bond ) public bonds;  // holds all bond info, accessible using the bonds id number
 
-    // XXX
-    mapping ( uint => Bond ) public bonds; // holds all bond info, accessible using the bonds id number
+    uint public bondCount;                  // used for asigning next value to bonds mapping
 
-    // XXX
-    uint public bondCount; // used for asigning next value to bonds mapping
-
-    uint public totalDebt; // total value of outstanding bonds; used for pricing
+    uint public totalDebt;                  // total value of outstanding bonds; used for pricing
     
-    uint32 public lastDecay; // reference block for debt decay
+    uint32 public lastDecay;                // reference block for debt decay
     
     uint public immutable fixedSupply;
 
@@ -597,9 +593,10 @@ contract OlympusBondDepository is Ownable {
     /** 
      *  @notice redeem bond for user
      *  @param _bondId bonds unique id
-     *  @return uint
+     *  @param _to payout recipient
+     *  @return ( payout, fullyVested ) amount paid and if the bond has finished vesting
      */ 
-    function redeem( uint _bondId, address _to ) external returns ( uint ) {        
+    function redeem( uint _bondId, address _to ) external returns ( uint payout, bool fullyVested ) {        
         // interface bond using id
         Bond memory bond = bonds[ _bondId ];
 
@@ -615,7 +612,8 @@ contract OlympusBondDepository is Ownable {
             // emit bond data
             emit BondRedeemed( bond.owner, bond.payout, 0 );
             // pay user everything due 
-            return stakeOrSend( bond.owner , bond.payout ); 
+            return ( stakeOrSend( bond.owner , bond.payout ), true );
+            
 
         } else { 
             // calculate payout vested
@@ -630,7 +628,7 @@ contract OlympusBondDepository is Ownable {
             });
 
             emit BondRedeemed( bond.owner, payout, bonds[ _bondId ].payout );
-            return stakeOrSend( bond.owner, payout );
+            return ( stakeOrSend( bond.owner, payout ), false );
         }
     }
 
