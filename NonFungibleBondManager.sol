@@ -300,8 +300,6 @@ contract NonFungibleBondTeller is Ownable, ERC165, IERC721, IERC721Metadata {
         emit BondMinted ( _bondDepo, _amount, _maxPrice, _depositor , tokenId, bondId);
     }
 
-    // sell future yield
-
     function redeem( 
         uint _tokenId
     ) external returns ( uint payout, bool fullyVested ) {
@@ -368,7 +366,7 @@ contract NonFungibleBondTeller is Ownable, ERC165, IERC721, IERC721Metadata {
         require( msg.sender == ownerOf[ _tokenId ], "You're not the owner");
         // interface bonds array of bids
         Bid[] storage bids = bondBids[ _tokenId ];
-        // interface bid thats being accepted
+        // interface bid thats being cancelled
         Bid storage _bid = bids[ _bidId ];
         // make sure caller is bidder
         require( msg.sender == _bid.bidder, "You're not the bidder for this bid");
