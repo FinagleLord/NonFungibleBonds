@@ -402,19 +402,9 @@ interface IwsOHM {
     function wOHMValue( uint _amount ) external view returns ( uint );
 }
 
-interface IsOHM {
-    function approve(address spender, uint256 amount) external returns (bool);
-}
-
-interface IStaking {
-    function stake( uint _amount, address _recipient ) external returns ( bool );
-    function unstake( uint _amount, bool _trigger ) external;
-    function claim( address _recipient ) external;
-}
 
 
-
-contract NonFungibleYeildManager is Ownable, NonFungibleToken("Olypus Yield Token", "YI3LD") {
+contract NonFungibleYeildManager is Ownable, NonFungibleToken("Olympus Yield Token", "YI3LD") {
 
     /////////// imports ///////////
 
