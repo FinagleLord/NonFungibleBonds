@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: WTFPL
-pragma solidity ^0.8.6;
+pragma solidity ^0.8.0;
 
 import "./libraries/Ownable.sol";
 import "./libraries/ERC165.sol";
